@@ -13,53 +13,50 @@ import com.google.common.collect.HashBiMap
 import akka.actor.Props
 import scala.collection.mutable.Map
 import akka.actor.Actor
+import scala.collection.concurrent.TrieMap
+import RemoteConnection.getAddrString
+class ConductorHandler(system: ActorSystem) extends IoHandlerAdapter {
 
-class EchoProtocolHandler(system: ActorSystem) extends IoHandlerAdapter {
+  var clients: Map[IoSession, ActorRef] = TrieMap[IoSession, ActorRef]()
 
-  var connections: Map[Long, ActorRef] = Map()
-
-  @throws(classOf[Exception])
   override def sessionCreated(session: IoSession) {
     session.getConfig().setIdleTime(IdleStatus.BOTH_IDLE, 10);
   }
 
-  @throws(classOf[Exception])
-  override def sessionClosed(session: IoSession) {
-    connections.remove(session.getId)
-  }
-
-  @throws(classOf[Exception])
   override def sessionOpened(session: IoSession) {
-    println("OPENED");
-
-    if (!connections.contains(session.getId)) {
-      connections(session.getId) = system.actorOf(Props[RequestHandler])
-    }
+    println("Connection from : " + getAddrString(session));
+    val fsm: ActorRef = system.actorOf(Props[ServerFSM])
+    clients.put(session, fsm)
   }
 
-  @throws(classOf[Exception])
+  override def sessionClosed(session: IoSession) {
+    val fsm: ActorRef = clients.get(session).get
+    fsm ! Controller.ClientDisconnected
+    clients.remove(session)
+  }
+
   override def sessionIdle(session: IoSession, status: IdleStatus) {
     println("*** IDLE #" + session.getIdleCount(IdleStatus.BOTH_IDLE) + " ***");
   }
 
-  @throws(classOf[Exception])
   override def exceptionCaught(session: IoSession, cause: Throwable) {
-    connections.remove(session.getId)
+    clients.remove(session)
     session.closeNow()
   }
-  @throws(classOf[Exception])
+
   override def messageSent(session: IoSession, message: AnyRef) {
-   
+
   }
 
-  @throws(classOf[Exception])
   override def messageReceived(session: IoSession, message: AnyRef) {
     // Write the received data back to remote peer
-    println("Received : " + message);
-    session.write("Echo: " + message);
-    val requestHandler: ActorRef = connections(session.getId())
-    
-    requestHandler.tell(message, Actor.noSender)
+    println("message from " + getAddrString(session) + " :" + message);
+    message match {
+      case msg: String => clients(session).tell(msg, Actor.noSender)
+      case msg =>
+        println("client " + getAddrString(session) + " sent garbage " + msg)
+        session.closeOnFlush()
+    }
   }
 
 }

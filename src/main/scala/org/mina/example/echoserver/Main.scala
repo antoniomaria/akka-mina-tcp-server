@@ -25,7 +25,7 @@ object Main extends App {
   val chain: DefaultIoFilterChainBuilder = acceptor.getFilterChain();
   chain.addLast("codec", pcf)
   
-  acceptor.setHandler(new EchoProtocolHandler(system));
+  acceptor.setHandler(new ConductorHandler(system));
 
   acceptor.bind(new InetSocketAddress(PORT));
 
