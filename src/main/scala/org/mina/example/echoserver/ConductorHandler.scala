@@ -25,21 +25,24 @@ class ConductorHandler(system: ActorSystem) extends IoHandlerAdapter {
 
   override def sessionOpened(session: IoSession) {
     println("Connection from : " + getAddrString(session));
-    val fsm: ActorRef = system.actorOf(Props[ServerFSM])
+    val fsm: ActorRef = system.actorOf(Props(classOf [ServerFSM], session ))
     clients.put(session, fsm)
   }
 
   override def sessionClosed(session: IoSession) {
+    println("Connection close : " + getAddrString(session));
     val fsm: ActorRef = clients.get(session).get
     fsm ! Controller.ClientDisconnected
     clients.remove(session)
   }
 
   override def sessionIdle(session: IoSession, status: IdleStatus) {
-    println("*** IDLE #" + session.getIdleCount(IdleStatus.BOTH_IDLE) + " ***");
+    //println("*** IDLE #" + session.getIdleCount(IdleStatus.BOTH_IDLE) + " ***");
+    println("Connection Idle : " + getAddrString(session));
   }
 
   override def exceptionCaught(session: IoSession, cause: Throwable) {
+    println("Connection Exception : " + getAddrString(session) + " " + cause);
     clients.remove(session)
     session.closeNow()
   }
@@ -53,9 +56,8 @@ class ConductorHandler(system: ActorSystem) extends IoHandlerAdapter {
     println("message from " + getAddrString(session) + " :" + message);
     message match {
       case msg: String => clients(session).tell(msg, Actor.noSender)
-      case msg =>
-        println("client " + getAddrString(session) + " sent garbage " + msg)
-        session.closeOnFlush()
+      case _ =>
+        println("client " + getAddrString(session) + " sent garbage " + message)
     }
   }
 
